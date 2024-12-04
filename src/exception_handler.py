@@ -4,7 +4,7 @@ from app import app
 
 
 @app.exception_handler(HTTPException)
-async def handle_bad_request_exception(request: Request, exc: HTTPException):
+def handle_bad_request_exception(request: Request, exc: HTTPException):
 
     return JSONResponse(
         status_code=exc.status_code,

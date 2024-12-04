@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from src.service.health_check import health_check
+import src.service.health_check as service
 
 router = APIRouter(
     prefix="/health-check",
@@ -9,4 +9,4 @@ router = APIRouter(
 
 @router.get("/")
 def health_check():
-    return health_check()
+    return service.health_check()

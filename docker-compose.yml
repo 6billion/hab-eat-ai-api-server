@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   app:
-    build: .
+    image: abjin/hab-eat-ai-api-server:latest
     container_name: app
     command: uvicorn src.app:app --reload --workers 1 --host 0.0.0.0 --port 8000
     ports:

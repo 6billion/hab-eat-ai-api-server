@@ -4,6 +4,10 @@ import requests
 from io import BytesIO
 
 
+food_cls_model = YOLO('src/ai/weights/food-cls-best.pt')
+gym_equipment_cls_model = YOLO('src/ai/weights/gym-equipment-cls-best.pt')
+
+
 def load_image(img_url: str):
     response = requests.get(img_url)
     img = Image.open(BytesIO(response.content)).convert("RGB")
@@ -11,9 +15,8 @@ def load_image(img_url: str):
 
 
 def predict_food_cls(url: str):
-    model = YOLO('src/ai/weights/food-cls-best.pt')
     img = load_image(url)
-    result = model(img)[0]
+    result = food_cls_model(img)[0]
 
     probs = result.probs
     top1_class_index = probs.top1
@@ -34,10 +37,8 @@ def predict_food_cls(url: str):
 
 
 def predict_gym_equipment_cls(url: str):
-    model = YOLO('src/ai/weights/gym-equipment-cls-best.pt')
-
     img = load_image(url)
-    result = model(img)[0]
+    result = gym_equipment_cls_model(img)[0]
 
     class_index = result.boxes.cls.item()
     class_name = result.names[class_index]

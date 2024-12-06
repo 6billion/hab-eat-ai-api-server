@@ -11,7 +11,7 @@ def load_image(img_url: str):
 
 
 def predict_food_cls(url: str):
-    model = YOLO('src/ai/weights/best.pt')
+    model = YOLO('src/ai/weights/food-cls-best.pt')
     img = load_image(url)
     result = model(img)[0]
 
@@ -31,3 +31,16 @@ def predict_food_cls(url: str):
         "top5ClassName": top5_class_name,
         "top5Score": top5_score
     }
+
+
+def predict_gym_equipment_cls(url: str):
+    model = YOLO('src/ai/weights/gym-equipment-cls-best.pt')
+
+    img = load_image(url)
+    result = model(img)[0]
+
+    class_index = result.boxes.cls.item()
+    class_name = result.names[class_index]
+    score = float(result.boxes.conf)
+
+    return {"top1ClassName": class_name, "top1Score": score}

@@ -13,3 +13,9 @@ router = APIRouter(
 def predict_food_cls(body: PredictFoodClassificationPredictRequest):
     result = service.predict_food_cls(body.url)
     return JSONResponse(status_code=status.HTTP_200_OK, content=result)
+
+
+@router.post("/gym_equipment/predict")
+def predict_gym_equipment_cls(body: PredictFoodClassificationPredictRequest):
+    result = service.predict_gym_equipment_cls(body.url)
+    return JSONResponse(status_code=status.HTTP_200_OK, content=result)

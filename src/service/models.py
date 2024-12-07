@@ -4,6 +4,7 @@ import requests
 from io import BytesIO
 import numpy as np
 import cv2
+import torch
 
 import src.ai.session.food as food_session
 import src.ai.session.gym_equipment as gym_equipment_session
@@ -17,11 +18,12 @@ def load_image(img_url: str, transformation):
     tensor = transformation(img)
     tensor = np.array(tensor)
     tensor = np.expand_dims(tensor, axis=0)
+    tensor = torch.Tensor(tensor)
     return tensor, img
 
 
 def cls_model_postprocess(output, labels):
-    probabilities = output[0][0]
+    probabilities = output[0]
     predicted_class_id = np.argmax(probabilities)
     confidence = probabilities[predicted_class_id]
     top1_class_name, top1_score = labels[predicted_class_id], confidence.item()
@@ -59,7 +61,7 @@ def detection_model_postprocess(output, input_shape, img_shape, labels):
         classes_scores = outputs[i][4:]
 
         # Find the maximum score among the class scores
-        max_score = np.amax(classes_scores)
+        max_score = classes_scores[np.argmax(classes_scores)]
 
         # If the maximum score is above the confidence threshold
         if max_score >= confidence_thres:
@@ -76,8 +78,8 @@ def detection_model_postprocess(output, input_shape, img_shape, labels):
             height = int(h * y_factor)
 
             # Add the class ID, score, and box coordinates to the respective lists
-            class_ids.append(class_id)
-            scores.append(max_score)
+            class_ids.append(class_id.item())
+            scores.append(max_score.item())
             boxes.append([left, top, width, height])
 
     # Apply non-maximum suppression to filter out overlapping bounding boxes
@@ -97,36 +99,35 @@ def detection_model_postprocess(output, input_shape, img_shape, labels):
         # self.draw_detections(input_image, box, score, class_id)
 
     # Return the modified input image
+
     top1_idx = np.argmax(result['scores'])
     top1_className = result['class_names'][top1_idx]
-    top1_score = result['scores'][top1_idx].item()
+    top1_score = result['scores'][top1_idx]
 
     return {"top1ClassName": top1_className, "top1Score": top1_score}
 
 
 def predict_food_cls(url: str):
     tensor, img = load_image(url, food_session.transformation)
-    output = food_session.session.run(None, {"images": tensor})
+    output = food_session.session(tensor)
     return cls_model_postprocess(output, food_session.labels)
 
 
 def predict_gym_equipment(url: str):
     tensor, img = load_image(url, gym_equipment_session.transformation)
-    session = gym_equipment_session.session
 
-    input_shape = session.get_inputs()[0].shape[2:]
+    input_shape = list(gym_equipment_session.input_shape)
     img_shape = list(img.size)
 
-    output = gym_equipment_session.session.run(None, {"images": tensor})
+    output = gym_equipment_session.session(tensor)
     return detection_model_postprocess(output, input_shape, img_shape, gym_equipment_session.labels)
 
 
 def predict_yolo11(url: str):
     tensor, img = load_image(url, yolo11_session.transformation)
-    session = yolo11_session.session
 
-    input_shape = session.get_inputs()[0].shape[2:]
+    input_shape = list(yolo11_session.input_shape)
     img_shape = list(img.size)
 
-    output = yolo11_session.session.run(None, {"images": tensor})
+    output = yolo11_session.session(tensor)
     return detection_model_postprocess(output, input_shape, img_shape, yolo11_session.labels)

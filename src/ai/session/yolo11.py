@@ -1,8 +1,11 @@
-import onnxruntime
 from torchvision.transforms import Compose, Resize, ToTensor
+import torch
 
-session = onnxruntime.InferenceSession(
-    "src/ai/onnx/yolo11m.onnx")
+session = torch.jit.load("src/ai/torchscript/yolo11m.torchscript")
+
+input_shape = (640, 640)
+
+transformation = Compose([Resize(input_shape), ToTensor()])
 
 labels = ['person',
           'bicycle',
@@ -84,5 +87,3 @@ labels = ['person',
           'teddy bear',
           'hair drier',
           'toothbrush']
-
-transformation = Compose([Resize((640, 640)), ToTensor()])

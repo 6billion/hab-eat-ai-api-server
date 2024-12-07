@@ -1,16 +1,12 @@
-import onnxruntime
 from torchvision.transforms import Compose, Resize, ToTensor
+import torch
 
-transformation = Compose(
-    [
-        Resize((416, 416)),
-        ToTensor(),
-    ]
-)
+session = torch.jit.load(
+    "src/ai/torchscript/gym_equipment.torchscript")
 
-session = onnxruntime.InferenceSession(
-    "src/ai/onnx/gym_equipment.onnx")
+input_shape = (416, 416)
 
+transformation = Compose([Resize(input_shape), ToTensor()])
 
 labels = ['Chest Press machine',
           'Lat Pull Down',

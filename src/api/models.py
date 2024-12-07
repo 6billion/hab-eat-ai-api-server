@@ -16,8 +16,8 @@ def predict_food_cls(body: PredictRequest):
 
 
 @router.post("/gym_equipment/predict")
-def predict_gym_equipment_cls(body: PredictRequest):
-    result = service.predict_gym_equipment_cls(body.url)
+def predict_gym_equipment(body: PredictRequest):
+    result = service.predict_gym_equipment(body.url)
     return JSONResponse(status_code=status.HTTP_200_OK, content=result)
 
 

@@ -1,59 +1,133 @@
-from ultralytics import YOLO
+# from ultralytics import YOLO
 from PIL import Image
 import requests
 from io import BytesIO
+import numpy as np
+import cv2
+import torch
+
+import src.ai.session.food as food_session
+import src.ai.session.gym_equipment as gym_equipment_session
+import src.ai.session.yolo11 as yolo11_session
 
 
-food_cls_model = YOLO('src/ai/weights/food-cls-best.pt')
-gym_equipment_cls_model = YOLO('src/ai/weights/gym-equipment-cls-best.pt')
-yolo11_model = YOLO('src/ai/weights/yolo11m.pt')
-
-
-def load_image(img_url: str):
+def load_image(img_url: str, transformation):
     response = requests.get(img_url)
     img = Image.open(BytesIO(response.content)).convert("RGB")
-    return img
+
+    tensor = transformation(img)
+    tensor = np.array(tensor)
+    tensor = np.expand_dims(tensor, axis=0)
+    tensor = torch.Tensor(tensor)
+    return tensor, img
 
 
-def predict_food_cls(url: str):
-    img = load_image(url)
-    result = food_cls_model(img)[0]
-
-    probs = result.probs
-    top1_class_index = probs.top1
-    top1_class_name = result.names[top1_class_index]
-    top1_score = float(probs.top1conf)
-
-    top5_class_index = probs.top5
-    top5_class_name = list(
-        map(lambda idx: result.names[idx], top5_class_index))
-    top5_score = list(map(lambda conf: float(conf), probs.top5conf))
-
+def cls_model_postprocess(output, labels):
+    probabilities = output[0]
+    predicted_class_id = np.argmax(probabilities)
+    confidence = probabilities[predicted_class_id]
+    top1_class_name, top1_score = labels[predicted_class_id], confidence.item()
     return {
         "top1ClassName": top1_class_name,
         "top1Score": top1_score,
-        "top5ClassName": top5_class_name,
-        "top5Score": top5_score
     }
 
 
-def predict_gym_equipment_cls(url: str):
-    img = load_image(url)
-    result = gym_equipment_cls_model(img)[0]
+def detection_model_postprocess(output, input_shape, img_shape, labels):
+    confidence_thres = 0.5
+    iou_thres = 0.5
 
-    class_index = result.boxes.cls.item()
-    class_name = result.names[class_index]
-    score = float(result.boxes.conf)
+    # Transpose and squeeze the output to match the expected shape
+    outputs = np.transpose(np.squeeze(output[0]))
 
-    return {"top1ClassName": class_name, "top1Score": score}
+    # Get the number of rows in the outputs array
+    rows = outputs.shape[0]
+
+    # Lists to store the bounding boxes, scores, and class IDs of the detections
+    boxes = []
+    scores = []
+    class_ids = []
+
+    # Calculate the scaling factors for the bounding box coordinates
+    img_width, img_height = img_shape
+    input_width, input_height = input_shape
+
+    x_factor = img_width / input_width
+    y_factor = img_height / input_height
+
+    # Iterate over each row in the outputs array
+    for i in range(rows):
+        # Extract the class scores from the current row
+        classes_scores = outputs[i][4:]
+
+        # Find the maximum score among the class scores
+        max_score = classes_scores[np.argmax(classes_scores)]
+
+        # If the maximum score is above the confidence threshold
+        if max_score >= confidence_thres:
+            # Get the class ID with the highest score
+            class_id = np.argmax(classes_scores)
+
+            # Extract the bounding box coordinates from the current row
+            x, y, w, h = outputs[i][0], outputs[i][1], outputs[i][2], outputs[i][3]
+
+            # Calculate the scaled coordinates of the bounding box
+            left = int((x - w / 2) * x_factor)
+            top = int((y - h / 2) * y_factor)
+            width = int(w * x_factor)
+            height = int(h * y_factor)
+
+            # Add the class ID, score, and box coordinates to the respective lists
+            class_ids.append(class_id.item())
+            scores.append(max_score.item())
+            boxes.append([left, top, width, height])
+
+    # Apply non-maximum suppression to filter out overlapping bounding boxes
+    indices = cv2.dnn.NMSBoxes(boxes, scores, confidence_thres, iou_thres)
+
+    # Iterate over the selected indices after non-maximum suppression
+    result = {'scores': [], "class_names": []}
+    for i in indices:
+        # Get the box, score, and class ID corresponding to the index
+        box = boxes[i]
+        score = scores[i]
+        class_id = class_ids[i]
+        result['scores'].append(score)
+        result['class_names'].append(labels[class_id])
+
+        # Draw the detection on the input image
+        # self.draw_detections(input_image, box, score, class_id)
+
+    # Return the modified input image
+
+    top1_idx = np.argmax(result['scores'])
+    top1_className = result['class_names'][top1_idx]
+    top1_score = result['scores'][top1_idx]
+
+    return {"top1ClassName": top1_className, "top1Score": top1_score}
+
+
+def predict_food_cls(url: str):
+    tensor, img = load_image(url, food_session.transformation)
+    output = food_session.session(tensor)
+    return cls_model_postprocess(output, food_session.labels)
+
+
+def predict_gym_equipment(url: str):
+    tensor, img = load_image(url, gym_equipment_session.transformation)
+
+    input_shape = list(gym_equipment_session.input_shape)
+    img_shape = list(img.size)
+
+    output = gym_equipment_session.session(tensor)
+    return detection_model_postprocess(output, input_shape, img_shape, gym_equipment_session.labels)
 
 
 def predict_yolo11(url: str):
-    img = load_image(url)
-    result = yolo11_model(img)[0]
+    tensor, img = load_image(url, yolo11_session.transformation)
 
-    class_index = result.boxes.cls.item()
-    class_name = result.names[class_index]
-    score = float(result.boxes.conf)
+    input_shape = list(yolo11_session.input_shape)
+    img_shape = list(img.size)
 
-    return {"top1ClassName": class_name, "top1Score": score}
+    output = yolo11_session.session(tensor)
+    return detection_model_postprocess(output, input_shape, img_shape, yolo11_session.labels)

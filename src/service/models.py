@@ -98,6 +98,8 @@ def detection_model_postprocess(output, input_shape, img_shape, labels):
         # self.draw_detections(input_image, box, score, class_id)
 
     # Return the modified input image
+    if (len(result["scores"]) == 0):
+        return {"top1ClassName": None, "top1Score": None}
 
     top1_idx = np.argmax(result['scores'])
     top1_className = result['class_names'][top1_idx]

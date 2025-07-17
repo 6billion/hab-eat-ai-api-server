@@ -6,17 +6,30 @@
 
 ### AI 모델
 1. **음식 분류 (Food Classification)** 
-   - 90가지 이상의 다양한 음식을 인식
+   - **모델**: YOLOv11-cls (Classification)
+   - **데이터셋**: 셀렉트스타 오픈데이터셋 - 음식 사진 데이터셋
+   - **클래스 수**: 90개 음식 카테고리 (총 100개 중 선별)
+   - **이미지 수**: 클래스당 1,000개 (총 100,000개)
+   - **훈련 이미지 크기**: 640x640
+   - **성능**: Top-1 Accuracy ~88%, Top-5 Accuracy ~98%
    - 한국 음식, 양식, 아시아 음식 등 포함
    - 신뢰도 점수와 함께 예측 결과 제공
 
 2. **운동기구 탐지 (Gym Equipment Detection)**
-   - 13가지 헬스장 운동기구 종류 인식
+   - **모델**: YOLOv11m (Object Detection)
+   - **데이터셋**: Roboflow Universe - workout dataset
+   - **이미지 수**: 6,656개
+   - **클래스 수**: 13개 운동 장비
+   - **훈련 이미지 크기**: 416x416
+   - **성능**: mAP50 ~68%, mAP50-95 ~51%
    - 객체 탐지 기능으로 이미지 내 운동기구 위치까지 파악
    - Chest Press, Lat Pull Down, Leg Press 등 주요 운동기구 지원
 
 3. **범용 객체 탐지 (YOLO11)**
-   - COCO 데이터셋 기반 80개 클래스 객체 탐지
+   - **모델**: YOLOv11m (Object Detection)
+   - **데이터셋**: COCO 데이터셋 기반
+   - **클래스 수**: 80개 클래스 객체 탐지
+   - **훈련 이미지 크기**: 640x640
    - 사람, 동물, 차량, 일상용품 등 다양한 객체 인식
 
 ## 🏗️ 프로젝트 구조
@@ -137,6 +150,139 @@ curl -X POST "http://localhost:8000/models/food-classification/predict" \
 curl -X POST "http://localhost:8000/models/gym_equipment/predict" \
      -H "Content-Type: application/json" \
      -d '{"url": "https://example.com/gym-image.jpg"}'
+```
+
+## 🧠 모델 훈련 정보
+
+### 음식 분류 모델
+- **기반 모델**: YOLOv11-cls
+- **데이터셋**: [셀렉트스타 오픈데이터셋 - 음식 사진 데이터셋](https://open.selectstar.ai/ko/computervisionlab)
+- **데이터셋 특징**:
+  - 고해상도: 1024x1024 픽셀 이상의 고품질 이미지
+  - 다국가 음식: 한국, 서양, 아시아 등 다양한 나라의 음식 포함
+  - 계층 구조 레이블링: 음식 재료별 세부 분류 정보
+  - 크라우드소싱: 캐시미션 플랫폼을 통한 데이터 수집
+  - 라이선스: CC BY-SA
+
+**훈련 코드 예시:**
+```python
+from ultralytics import YOLO
+
+model = YOLO("yolo11m-cls.pt")
+results = model.train(
+    data="./food-dataset", 
+    epochs=10, 
+    imgsz=640,
+    batch=32
+)
+```
+
+### 운동기구 탐지 모델  
+- **기반 모델**: YOLOv11m
+- **데이터셋**: [Roboflow Universe - workout dataset](https://universe.roboflow.com/yekwon/workout-yem51)
+- **데이터셋 특징**:
+  - 헬스장 환경의 실제 운동기구 이미지
+  - 다양한 각도와 조명 조건
+  - 바운딩 박스 어노테이션
+  - 라이선스: CC BY 4.0
+
+**훈련 코드 예시:**
+```python
+from ultralytics import YOLO
+
+model = YOLO("yolo11m.pt")
+results = model.train(
+    data="workout-dataset/data.yaml",
+    epochs=100,
+    imgsz=416,
+    batch=16
+)
+```
+
+## 📊 성능 결과
+
+### 음식 분류 성능
+- **Top-1 Accuracy**: 88.3%
+- **Top-5 Accuracy**: 97.8%
+- **훈련 손실**: 0.219
+- **검증 손실**: 0.509
+
+### 운동기구 탐지 성능
+- **mAP50**: 68.0%
+- **mAP50-95**: 51.3%
+- **Precision**: 64.9%
+- **Recall**: 60.8%
+
+## 🔬 모델 추론 예시
+
+### TorchScript 모델 직접 사용
+```python
+import torch
+from torchvision.transforms import Compose, Resize, ToTensor
+from PIL import Image
+import requests
+from io import BytesIO
+
+# 음식 분류 모델 로드
+food_model = torch.jit.load("src/ai/torchscript/food.torchscript")
+transformation = Compose([Resize((640, 640)), ToTensor()])
+
+# 이미지 전처리 및 추론
+def predict_food(image_url):
+    response = requests.get(image_url)
+    img = Image.open(BytesIO(response.content)).convert("RGB")
+    tensor = transformation(img).unsqueeze(0)
+    
+    with torch.no_grad():
+        output = food_model(tensor)
+        probabilities = output[0]
+        predicted_class_id = probabilities.argmax()
+        confidence = probabilities[predicted_class_id].item()
+    
+    return predicted_class_id, confidence
+
+# 운동기구 탐지 모델 사용
+gym_model = torch.jit.load("src/ai/torchscript/gym_equipment.torchscript")
+
+def predict_gym_equipment(image_url):
+    # 이미지 로드 및 전처리
+    response = requests.get(image_url)
+    img = Image.open(BytesIO(response.content)).convert("RGB")
+    tensor = Compose([Resize((416, 416)), ToTensor()])(img).unsqueeze(0)
+    
+    with torch.no_grad():
+        output = gym_model(tensor)
+        # 후처리를 통해 바운딩 박스 및 클래스 추출
+        # (실제 구현은 src/service/models.py 참고)
+    
+    return detection_results
+```
+
+### 원본 YOLO 모델 사용 (훈련 환경에서)
+```python
+from ultralytics import YOLO
+
+# 음식 분류
+food_model = YOLO("food/runs/classify/train6/weights/best.pt")
+results = food_model("food_image.jpg")
+
+for result in results:
+    probs = result.probs
+    class_name = result.names[probs.top1]
+    confidence = float(probs.top1conf)
+    print(f"음식: {class_name} (신뢰도: {confidence:.2f})")
+
+# 운동기구 탐지
+gym_model = YOLO("gym/runs/detect/train/weights/best.pt")
+results = gym_model("gym_image.jpg")
+
+for result in results:
+    boxes = result.boxes
+    for box in boxes:
+        class_id = int(box.cls)
+        confidence = float(box.conf)
+        class_name = result.names[class_id]
+        print(f"운동기구: {class_name} (신뢰도: {confidence:.2f})")
 ```
 
 ## 🎯 지원 클래스
